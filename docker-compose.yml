@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  master:
+    image: bitnami/postgresql:latest
+    environment:
+      - POSTGRESQL_REPLICATION_MODE=master
+      - POSTGRESQL_REPLICATION_USER=repl_user
+      - POSTGRESQL_REPLICATION_PASSWORD=repl_password
+      - POSTGRESQL_USERNAME=postgres
+      - POSTGRESQL_PASSWORD=example
+      - POSTGRESQL_DATABASE=mydb
+    volumes:
+      - master_data:/bitnami/postgresql
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./postgres/backups:/backups
+    ports:
+      - "5432:5432"
+
+  slave:
+    image: bitnami/postgresql:latest
+    environment:
+      - POSTGRESQL_REPLICATION_MODE=slave
+      - POSTGRESQL_REPLICATION_USER=repl_user
+      - POSTGRESQL_REPLICATION_PASSWORD=repl_password
+      - POSTGRESQL_MASTER_HOST=master
+      - POSTGRESQL_MASTER_PORT_NUMBER=5432
+      - POSTGRESQL_PASSWORD=example
+    volumes:
+      - slave_data:/bitnami/postgresql
+    depends_on:
+      - master
+
+  backup:
+    image: bitnami/postgresql:latest
+    environment:
+      - POSTGRESQL_PASSWORD=example
+    volumes:
+      - ./postgres/backups:/backups
+    depends_on:
+      - master
+    command: >
+      /bin/bash -c '
+      while true; do
+        sleep 86400 # 1 day
+        PGPASSWORD=$$POSTGRESQL_PASSWORD pg_dumpall -h master -U postgres > /backups/$$(date +%Y-%m-%dT%H:%M:%S).sql
+      done
+      '
+
+  db_admin:
+    image: adminer:latest
+    ports:
+      - 9002:8080
+
+volumes:
+  master_data:
+  slave_data:
